@@ -2,3 +2,5 @@ pip install torch torchvision transformers sentencepiece torchaudio librosa psut
 
 pip install huggingface_hub
 huggingface-cli login
+
+pip install torch torchvision transformers sentencepiece torchaudio librosa psutil pandas pynvml
