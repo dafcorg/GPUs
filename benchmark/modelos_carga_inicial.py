@@ -9,17 +9,17 @@ import datetime
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-# Intentar importar pynvml para monitoreo de GPU
 try:
-    from pynvml import nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetUtilizationRates,
-                         nvmlDeviceGetMemoryInfo, nvmlShutdown, nvmlDeviceGetPowerUsage
+    from pynvml import (
+        nvmlInit, nvmlDeviceGetHandleByIndex, nvmlDeviceGetUtilizationRates,
+        nvmlDeviceGetMemoryInfo, nvmlShutdown, nvmlDeviceGetPowerUsage
+    )
     nvmlInit()
     gpu_available = True
     handle = nvmlDeviceGetHandleByIndex(0)
 except:
     gpu_available = False
 
-# Configuración de modelos disponibles
 modelos = {
     "ResNet (imagen)": ("torchvision", "resnet50"),
     "GPT-2 (texto)": ("huggingface", "gpt2"),
@@ -30,15 +30,16 @@ modelos = {
     "LLaMA 2 7B": ("huggingface", "meta-llama/Llama-2-7b-hf")
 }
 
-# Carpeta de resultados
 os.makedirs("results", exist_ok=True)
+os.makedirs("model_cache", exist_ok=True)
+torch.hub.set_dir("./model_cache")
 
 def monitorear(dispositivo, stop_event, stats_list):
     while not stop_event.is_set():
         if dispositivo == 'gpu' and gpu_available:
             util = nvmlDeviceGetUtilizationRates(handle)
             mem_info = nvmlDeviceGetMemoryInfo(handle)
-            watts = nvmlDeviceGetPowerUsage(handle) / 1000.0  # mW to W
+            watts = nvmlDeviceGetPowerUsage(handle) / 1000.0
             stats = {
                 'timestamp': time.time(),
                 'gpu_usage_percent': util.gpu,
@@ -64,7 +65,6 @@ def prueba_esfuerzo(nombre_modelo, tipo, id_modelo, dispositivo):
     start_time = time.time()
     device = torch.device("cuda" if dispositivo == 'gpu' and torch.cuda.is_available() else "cpu")
 
-    # ===== Carga del modelo =====
     if tipo == "torchvision":
         model = getattr(models, id_modelo)(pretrained=True).to(device).eval()
         data = torch.randn(5000, 3, 224, 224).to(device)
@@ -73,8 +73,8 @@ def prueba_esfuerzo(nombre_modelo, tipo, id_modelo, dispositivo):
                 model(data[i:i+1])
 
     elif tipo == "huggingface":
-        tokenizer = AutoTokenizer.from_pretrained(id_modelo, use_auth_token=True)
-        model = AutoModel.from_pretrained(id_modelo, use_auth_token=True).to(device).eval()
+        tokenizer = AutoTokenizer.from_pretrained(id_modelo, cache_dir="./model_cache", use_auth_token=True)
+        model = AutoModel.from_pretrained(id_modelo, cache_dir="./model_cache", use_auth_token=True).to(device).eval()
         prompts = ["Hello, how are you?" for _ in range(1000)]
         with torch.no_grad():
             for prompt in prompts:
@@ -101,10 +101,6 @@ def prueba_esfuerzo(nombre_modelo, tipo, id_modelo, dispositivo):
     filename = f"results/{nombre_modelo.replace(' ', '_')}_{dispositivo}_{timestamp}.csv"
     df.to_csv(filename, index=False)
     return filename
-
-# ===========================
-# Interfaz
-# ===========================
 
 def iniciar():
     modelo = modelo_cb.get()
@@ -140,6 +136,5 @@ btn.pack(pady=20)
 
 root.mainloop()
 
-# Cerrar NVML si fue iniciado
 if gpu_available:
     nvmlShutdown()
