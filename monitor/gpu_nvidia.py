@@ -2,10 +2,12 @@
 """
 pip install pynvml pandas
 gpu_monitor.py  ▸  Registro continuo de sensores GPU → CSV
-Ejemplo de uso:
-    python gpu_monitor.py -o gpu_stats.csv -i 0.5 &
+Ejemplo de uso: W
+    start /b python gpu_nvidia.py -o gpu_stats.csv -i 0.5
     # …lanzar tu entrenamiento en otro terminal…
     # Ctrl-C para detener la captura
+Ejemplo de uso: Lx
+nohup python3 gpu_nvidia.py -o gpu_stats.csv -i 0.5 > gpu_monitor.log 2>&1 &
 Otra opción:
 nvidia-smi \
   --query-gpu=timestamp,name,index,utilization.gpu,\
@@ -14,7 +16,14 @@ memory.used,memory.total,temperature.gpu,power.draw \
   -lms 500   >> gpu_stats.csv
 
 """
-import time, csv, argparse, datetime as dt
+"""
+gpu_monitor.py  ▸  Registro continuo de sensores GPU → CSV
+Requisitos: pip install pynvml pandas
+"""
+
+import time, csv, argparse
+import datetime as dt
+from datetime import timezone
 from pynvml import (
     nvmlInit, nvmlShutdown, nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex,
     nvmlDeviceGetName, nvmlDeviceGetUtilizationRates,
@@ -24,13 +33,16 @@ from pynvml import (
 
 def snapshot(dev):
     """Devuelve una lista con las métricas clave de una GPU."""
-    name  = nvmlDeviceGetName(dev).decode()
+    # nvmlDeviceGetName ya devuelve str en versiones recientes
+    name  = nvmlDeviceGetName(dev)
     util  = nvmlDeviceGetUtilizationRates(dev)
     mem   = nvmlDeviceGetMemoryInfo(dev)
     temp  = nvmlDeviceGetTemperature(dev, NVML_TEMPERATURE_GPU)
-    power = nvmlDeviceGetPowerUsage(dev) / 1000.0       # mW → W
-    return [name, util.gpu, util.memory,
-            mem.used/1e6, mem.total/1e6, temp, power]
+    power = nvmlDeviceGetPowerUsage(dev) / 1000.0   # mW → W
+    return [name,
+            util.gpu, util.memory,
+            mem.used / 1e6, mem.total / 1e6,
+            temp, power]
 
 def main(out_path: str, interval: float):
     nvmlInit()
@@ -46,14 +58,15 @@ def main(out_path: str, interval: float):
         writer.writerow(header)
         try:
             while True:
-                tstamp = dt.datetime.utcnow().isoformat()
+                # timestamp timezone-aware
+                tstamp = dt.datetime.now(timezone.utc).isoformat()
                 for idx, h in enumerate(handles):
                     row = [tstamp, idx] + snapshot(h)
                     writer.writerow(row)
-                f.flush()          # asegura escritura inmediata
+                f.flush()
                 time.sleep(interval)
         except KeyboardInterrupt:
-            print("\n⏹  Monitorización detenida por el usuario.")
+            print("\n⏹ Monitorización detenida por el usuario.")
     nvmlShutdown()
 
 if __name__ == "__main__":
@@ -65,3 +78,4 @@ if __name__ == "__main__":
                    help="Intervalo de muestreo en segundos")
     args = p.parse_args()
     main(args.output, args.interval)
+
